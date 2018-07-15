@@ -2,6 +2,13 @@
 name = "jss_derive"
 version = "0.1.0"
 authors = ["Anton Shramko <antonshramko@yandex.ru>"]
+repository = "https://github.com/rise-ui/jss_derive"
+homepage = "https://github.com/rise-ui/jss_derive"
+description = "Derive of JSS"
+keywords = ["gui", "layout", "yoga", "parsing", "rise-ui"]
+readme = "README.md"
+categories = ["gui"]
+license = "MIT"
 
 [dependencies]
 syn = { version = "0.14", features = ["full"] }
