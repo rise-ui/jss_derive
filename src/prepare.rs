@@ -5,10 +5,7 @@ use inflector::Inflector;
 use regex::Regex;
 
 lazy_static! {
-  static ref RADIUS_EDGE_RE: Regex = Regex::new(r"^border_(?P<edge>\w+)_radius$").unwrap();
-  static ref STYLE_EDGE_RE: Regex = Regex::new(r"^border_(?P<edge>\w+)_style$").unwrap();
-  static ref COLOR_EDGE_RE: Regex = Regex::new(r"^border_(?P<edge>\w+)_color$").unwrap();
-  static ref BORDER_EDGE_RE: Regex = Regex::new(r"^border_(?P<edge>\w+)$").unwrap();
+  static ref BORDER_PROPERTY: Regex = Regex::new(r"^border_(?P<edge>\w+)_(radius|width|style|color)$").unwrap();
 }
 
 fn generate_expression(field: StructField) -> TokenStream {
@@ -31,7 +28,7 @@ fn generate_expression(field: StructField) -> TokenStream {
     }
 
     "BorderWidth" => {
-      let edge = BORDER_EDGE_RE.replace_all(name_str, "$edge");
+      let edge = BORDER_PROPERTY.replace_all(name_str, "$edge");
       let edge = edge.into_owned();
       let edge = Ident::new(&*edge, Span::call_site());
 
@@ -43,7 +40,7 @@ fn generate_expression(field: StructField) -> TokenStream {
     }
 
     "BorderStyle" => {
-      let edge = STYLE_EDGE_RE.replace_all(name_str, "$edge");
+      let edge = BORDER_PROPERTY.replace_all(name_str, "$edge");
       let edge = edge.into_owned();
       let edge = Ident::new(&*edge, Span::call_site());
 
@@ -54,8 +51,8 @@ fn generate_expression(field: StructField) -> TokenStream {
       }
     }
 
-    "Color" => {
-      let edge = COLOR_EDGE_RE.replace_all(name_str, "$edge");
+    "BorderColor" => {
+      let edge = BORDER_PROPERTY.replace_all(name_str, "$edge");
       let edge = edge.into_owned();
       let edge = Ident::new(&*edge, Span::call_site());
 
@@ -66,8 +63,8 @@ fn generate_expression(field: StructField) -> TokenStream {
       }
     }
 
-    "i32" => {
-      let edge = RADIUS_EDGE_RE.replace_all(name_str, "$edge");
+    "BorderRadius" => {
+      let edge = BORDER_PROPERTY.replace_all(name_str, "$edge");
       let edge = edge.into_owned();
       let edge = Ident::new(&*edge, Span::call_site());
 
@@ -124,6 +121,8 @@ pub fn get_impl_trait_tokens(struct_id: Ident, data_struct: DataStruct) -> Token
   quote! {
     impl PrepareStyleExt for #struct_id {
       fn get_prepared_styles(&self) -> (Apperance, Vec<FlexStyle>) {
+        use properties::BorderRadius;
+
         let mut apperance = Apperance::default();
         let mut layout: Vec<FlexStyle> = vec![];
         let mut transforms = vec![];
