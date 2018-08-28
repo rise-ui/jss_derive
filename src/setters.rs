@@ -24,14 +24,14 @@ fn get_after_match_setters(name: &str) -> TokenStream {
 }
 
 fn get_setter_apperance(field: StructField) -> TokenStream {
-  let expression_setter = get_after_match_setters("apperance");
+  let expression_setter = get_after_match_setters("appearance");
   let field_type = field.ftype;
   let name = field.name;
 
   quote!{
     stringify!(#name) => {
-      if let Some(expected) = extract!(Apperance::#field_type(_), property) {
-        let wrap_value = Apperance::#field_type(expected);
+      if let Some(expected) = extract!(Appearance::#field_type(_), property) {
+        let wrap_value = Appearance::#field_type(expected);
         let property_key = stringify!(#name).to_string();
 
         #expression_setter
@@ -130,12 +130,12 @@ fn get_expressions(ast_struct: DataStruct) -> (Vec<TokenStream>, Vec<TokenStream
 }
 
 pub fn get_impl_trait_tokens(struct_id: Ident, data_struct: DataStruct) -> TokenStream {
-  let (apperance, layout) = get_expressions(data_struct);
-  let rm_matcher_apperance = match_remove_property("apperance");
+  let (appearance, layout) = get_expressions(data_struct);
+  let rm_matcher_apperance = match_remove_property("appearance");
   let rm_matcher_layout = match_remove_property("layout");
 
   quote! {
-    use types::{Properties, PropertyError, PropertyValue, Apperance, Layout};
+    use types::{Properties, PropertyError, PropertyValue, Appearance, Layout};
     use utils::{apperance_keys_contains, layout_keys_contains};
     use std::collections::HashMap;
     use inflector::Inflector;
@@ -143,8 +143,8 @@ pub fn get_impl_trait_tokens(struct_id: Ident, data_struct: DataStruct) -> Token
     use traits::TStyle;
 
     impl TStyle for Properties {
-      fn get_apperance_style(&self, name: &str) -> Option<&Apperance> {
-        self.apperance.0.get(name)
+      fn get_apperance_style(&self, name: &str) -> Option<&Appearance> {
+        self.appearance.0.get(name)
       }
 
       fn get_layout_style(&self, name: &str) -> Option<&FlexStyle> {
@@ -153,7 +153,7 @@ pub fn get_impl_trait_tokens(struct_id: Ident, data_struct: DataStruct) -> Token
 
       fn set_style(&mut self, name: &str, property: PropertyValue) -> Result<(), PropertyError> {
         if apperance_keys_contains(&name) {
-          self.set_apperance_style(name, extract!(PropertyValue::Apperance(_), property))
+          self.set_apperance_style(name, extract!(PropertyValue::Appearance(_), property))
         } else if layout_keys_contains(&name) {
           self.set_layout_style(name, extract!(PropertyValue::Layout(_), property))
         } else {
@@ -161,11 +161,11 @@ pub fn get_impl_trait_tokens(struct_id: Ident, data_struct: DataStruct) -> Token
         }
       }
 
-      fn set_apperance_style(&mut self, name: &str, property: Option<Apperance>) -> Result<(), PropertyError> {
+      fn set_apperance_style(&mut self, name: &str, property: Option<Appearance>) -> Result<(), PropertyError> {
         #rm_matcher_apperance
 
         match name {
-          #(#apperance)*
+          #(#appearance)*
           _ => Err(PropertyError::InvalidKey {
             key: name.to_string()
           }),

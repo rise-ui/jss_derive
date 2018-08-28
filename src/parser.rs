@@ -38,7 +38,7 @@ fn get_expression_params(field: StructField) -> (Ident, Ident, Ident) {
   };
 
   let wrapper: Ident = if is_apperance {
-    Ident::new("Apperance", Span::call_site())
+    Ident::new("Appearance", Span::call_site())
   } else {
     Ident::new("Layout", Span::call_site())
   };
