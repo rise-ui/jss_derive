@@ -12,7 +12,6 @@ license = "MIT"
 
 [dependencies]
 syn = { version = "0.14", features = ["full"] }
-ordered-float = "0.5.0"
 enum_extract = "0.1"
 lazy_static = "1.0"
 proc-macro2 = "0.4"
