@@ -1,27 +1,14 @@
-use common::{StructField, optioned_type, field_to_name_and_ty };
 use proc_macro2::{Ident, Span, TokenStream};
 use syn::{DataStruct, Fields};
 use inflector::Inflector;
-use regex::Regex;
 
-lazy_static! {
-  static ref APPERANCE_KEYS: Vec<&'static str> = vec![ 
-    "background", "transform", "filter", "border_top_color", "border_right_color", "border_left_color",
-    "border_bottom_color", "border_top_style", "border_right_style", "border_left_style",
-    "border_bottom_style", "border_top_right_radius", "border_top_left_radius",
-    "border_bottom_right_radius", "border_bottom_left_radius",
-  ];
-  
-  static ref LAYOUT_KEYS: Vec<&'static str> = vec![ 
-    "flex_direction", "justify_content", "position", "align_content", "align_items", "align_self",
-    "flex_wrap", "display", "overflow", "aspect_ratio", "flex_shrink", "flex_grow", "flex", "bottom",
-    "end", "flex_basis", "height", "left", "margin", "margin_bottom", "margin_end", "margin_horizontal",
-    "margin_left", "margin_right", "margin_start", "margin_top", "margin_vertical", "max_height", "max_width",
-    "min_height", "min_width", "padding", "padding_bottom", "padding_end", "padding_horizontal", "padding_left",
-    "padding_right", "padding_start", "padding_top", "padding_vertical", "right", "start", "top", "width",
-    "border_bottom_width", "border_right_width", "border_left_width", "border_top_width",
-  ];
-}
+use common::{
+  apperance_keys_contains,
+  layout_keys_contains,
+  field_to_name_and_ty,
+  optioned_type,
+  StructField,
+};
 
 fn get_after_match_setters(name: &str) -> TokenStream {
   let field = Ident::new(name, Span::call_site());
@@ -128,14 +115,14 @@ fn get_expressions(ast_struct: DataStruct) -> (Vec<TokenStream>, Vec<TokenStream
   let apperance_fields = collected
     .iter()
     .cloned()
-    .filter(|x| APPERANCE_KEYS.contains(&x.name.to_string().as_str()))
+    .filter(|x| apperance_keys_contains(&x.name.to_string().as_str()))
     .map(get_setter_apperance)
     .collect::<Vec<TokenStream>>();
 
   let layout_fields = collected
     .iter()
     .cloned()
-    .filter(|x| LAYOUT_KEYS.contains(&x.name.to_string().as_str()))
+    .filter(|x| layout_keys_contains(&x.name.to_string().as_str()))
     .map(get_setter_layout)
     .collect::<Vec<TokenStream>>();
 
@@ -164,7 +151,7 @@ pub fn get_impl_trait_tokens(struct_id: Ident, data_struct: DataStruct) -> Token
         self.layout.0.get(name)
       }
 
-      fn set_style<T: Into<Option<PropertyValue>>>(&mut self, name: &str, property: T) -> Result<(), PropertyError> {
+      fn set_style(&mut self, name: &str, property: PropertyValue) -> Result<(), PropertyError> {
         if apperance_keys_contains(&name) {
           self.set_apperance_style(name, extract!(PropertyValue::Apperance(_), property))
         } else if layout_keys_contains(&name) {
@@ -174,7 +161,7 @@ pub fn get_impl_trait_tokens(struct_id: Ident, data_struct: DataStruct) -> Token
         }
       }
 
-      fn set_apperance_style<T: Into<Option<Apperance>>>(&mut self, name: &str, property: T) -> Result<(), PropertyError> {
+      fn set_apperance_style(&mut self, name: &str, property: Option<Apperance>) -> Result<(), PropertyError> {
         #rm_matcher_apperance
 
         match name {
@@ -185,7 +172,7 @@ pub fn get_impl_trait_tokens(struct_id: Ident, data_struct: DataStruct) -> Token
         }
       }
 
-      fn set_layout_style<T: Into<Option<Layout>>>(&mut self, name: &str, property: T) -> Result<(), PropertyError> {
+      fn set_layout_style(&mut self, name: &str, property: Option<Layout>) -> Result<(), PropertyError> {
         #rm_matcher_layout
 
         match name {
