@@ -1,6 +1,7 @@
 use syn::{GenericArgument, Field, Path, PathArguments, PathSegment, Type};
-use proc_macro2::Ident;
 use syn::punctuated::Punctuated;
+use proc_macro2::{Ident, Span};
+use inflector::Inflector;
 
 lazy_static! {
     static ref APPERANCE_KEYS: Vec<&'static str> = vec![
@@ -116,4 +117,21 @@ pub fn field_to_name_and_ty(field: Field) -> Option<(Ident, Path)> {
     } else {
         None
     }
+}
+
+/// Get key property name as class case
+/// With fix bug of inflector
+pub fn property_class_case(name: &str) -> (String, Ident)  {
+    let name = name.to_string().to_class_case();
+    let name: String = match name.as_str() {
+        "BorderBottomWidth" => "BorderBottom".into(),
+        "BorderRightWidth" => "BorderRight".into(),
+        "BorderLeftWidth" => "BorderLeft".into(),
+        "BorderTopWidth" => "BorderTop".into(),
+        "AlignItem" => "AlignItems".into(),
+        "FlexBasi" => "FlexBasis".into(),
+        _ => name.clone(),
+    };
+
+    (name.clone(), Ident::new(name.as_str(), Span::call_site()))
 }

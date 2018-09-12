@@ -6,6 +6,7 @@ use common::{
   apperance_keys_contains,
   layout_keys_contains,
   field_to_name_and_ty,
+  property_class_case,
   optioned_type,
   StructField,
 };
@@ -14,72 +15,74 @@ fn get_after_match_setters(name: &str) -> TokenStream {
     let field = Ident::new(name, Span::call_site());
 
     quote!{
-      if self.#field.0.contains_key(&property_key) {
-        let mut item = self.#field.0.get_mut(&property_key).unwrap();
-        *item = wrap_value;
-      } else {
-        self.#field.0.insert(property_key, wrap_value);
-      }
+        if properties.#field.0.contains_key(&key) {
+            let mut item = properties.#field.0.get_mut(&key).unwrap();
+            *item = wrap_value;
+        } else {
+            properties.#field.0.insert(key, wrap_value);
+        }
     }
 }
 
-fn get_setter_apperance(field: StructField) -> TokenStream {
+
+fn switch_case(field: StructField) -> TokenStream {
+    let name = field.name;
+
+    quote! {
+        stringify!(#name) => setters.set_#name(&mut self, name.to_string(), property),
+    }
+}
+
+fn setter_fn_appearance(field: StructField) -> TokenStream {
     let expression_setter = get_after_match_setters("appearance");
     let field_type = field.ftype;
     let name = field.name;
 
     quote!{
-      stringify!(#name) => {
-        if let Some(expected) = extract!(Appearance::#field_type(_), property) {
-          let wrap_value = Appearance::#field_type(expected);
-          let property_key = stringify!(#name).to_string();
-
-          #expression_setter
-          Ok(())
-        } else {
-          Err(PropertyError::InvalidType {
-            expected: stringify!(#field_type).to_string(),
-            property: stringify!(#name).to_string(),
-          })
-        }
-      },
+        pub fn set_#name(
+            properties: &mut Properties,
+            key: String,
+            value: PropertyValue
+        ) -> Result<(), PropertyError> {
+            if let Some(expected) = extract!(Appearance::#field_type(_), value) {
+                let wrap_value = Appearance::#field_type(expected);
+                #expression_setter
+                Ok(())
+            } else {
+                Err(PropertyError::InvalidType {
+                    expected: stringify!(#field_type).to_string(),
+                    property: stringify!(#name).to_string(),
+                })
+            }
+        },
     }
 }
 
-fn get_setter_layout(field: StructField) -> TokenStream {
+fn setter_fn_layout(field: StructField) -> TokenStream {
     // Fixes problem with `class_case` method if Inflector
     // Also check enum types for BorderWidth align
-    let enum_name = field.name.to_string().to_class_case();
-    let enum_name = match enum_name.as_str() {
-        "BorderBottomWidth" => "BorderBottom",
-        "BorderRightWidth" => "BorderRight",
-        "BorderLeftWidth" => "BorderLeft",
-        "BorderTopWidth" => "BorderTop",
-        "AlignItem" => "AlignItems",
-        "FlexBasi" => "FlexBasis",
-        _ => enum_name.as_str(),
-    };
-
-    let enum_name = Ident::new(enum_name, Span::call_site());
+    let (_, enum_name) = property_class_case(field.name.to_string().as_str());
     let expression_setter = get_after_match_setters("layout");
     let field_type = field.ftype;
     let name = field.name;
 
     quote!{
-      stringify!(#name) => {
-        if let Some(expected) = extract!(Layout::#field_type(_), property) {
-          let wrap_value = FlexStyle::#enum_name(expected);
-          let property_key = stringify!(#name).to_string();
-
-          #expression_setter
-          Ok(())
-        } else {
-          Err(PropertyError::InvalidType {
-            expected: stringify!(#field_type).to_string(),
-            property: stringify!(#name).to_string(),
-          })
-        }
-      },
+        pub fn set_#name(
+            properties: &mut Properties,
+            key: String,
+            value: PropertyValue
+        ) -> Result<(), PropertyError> {
+            if let Some(expected) = extract!(Layout::#field_type(_), value) {
+                let wrap_value = FlexStyle::#enum_name(expected);
+                #expression_setter
+                Ok(())
+            } else {
+                Err(PropertyError::InvalidType {
+                  expected: stringify!(#field_type).to_string(),
+                  property: stringify!(#name).to_string(),
+                })
+            }
+        } 
     }
 }
 
@@ -99,7 +102,7 @@ fn match_remove_property(name: &str) -> TokenStream {
     }
 }
 
-fn get_expressions(ast_struct: DataStruct) -> (Vec<TokenStream>, Vec<TokenStream>) {
+fn get_expressions(ast_struct: DataStruct) -> (Vec<TokenStream>, Vec<TokenStream>, Vec<TokenStream>, Vec<TokenStream>) {
     let fields = if let Fields::Named(x) = ast_struct.fields {
         x.named
     } else {
@@ -112,25 +115,40 @@ fn get_expressions(ast_struct: DataStruct) -> (Vec<TokenStream>, Vec<TokenStream
         .filter_map(|(name, type_path)| optioned_type(name, type_path.segments))
         .collect::<Vec<StructField>>();
 
-    let apperance_fields = collected
+    let apperance_setters = collected
         .iter()
         .cloned()
         .filter(|x| apperance_keys_contains(&x.name.to_string().as_str()))
-        .map(get_setter_apperance)
+        .map(setter_fn_appearance)
         .collect::<Vec<TokenStream>>();
 
-    let layout_fields = collected
+    let layout_setters = collected
         .iter()
         .cloned()
         .filter(|x| layout_keys_contains(&x.name.to_string().as_str()))
-        .map(get_setter_layout)
+        .map(setter_fn_layout)
         .collect::<Vec<TokenStream>>();
 
-    (apperance_fields, layout_fields)
+    let apperance_cases = collected
+        .iter()
+        .cloned()
+        .filter(|x| apperance_keys_contains(&x.name.to_string().as_str()))
+        .map(switch_case)
+        .collect::<Vec<TokenStream>>();
+
+    let layout_cases = collected
+        .iter()
+        .cloned()
+        .filter(|x| layout_keys_contains(&x.name.to_string().as_str()))
+        .map(switch_case)
+        .collect::<Vec<TokenStream>>();
+
+    (apperance_setters, layout_setters, apperance_cases, layout_cases)
 }
 
 pub fn get_impl_trait_tokens(struct_id: Ident, data_struct: DataStruct) -> TokenStream {
-    let (appearance, layout) = get_expressions(data_struct);
+    let (setters_appearance, setters_layout, cases_appearance, cases_layout) = get_expressions(data_struct);
+
     let rm_matcher_apperance = match_remove_property("appearance");
     let rm_matcher_layout = match_remove_property("layout");
 
@@ -141,6 +159,11 @@ pub fn get_impl_trait_tokens(struct_id: Ident, data_struct: DataStruct) -> Token
       use inflector::Inflector;
       use yoga::FlexStyle;
       use traits::TStyle;
+
+      pub mod setters {
+          #(#setters_appearance)*
+          #(#setters_layout)*
+      }
 
       impl TStyle for Properties {
         fn get_apperance_style(&self, name: &str) -> Option<&Appearance> {
@@ -165,7 +188,7 @@ pub fn get_impl_trait_tokens(struct_id: Ident, data_struct: DataStruct) -> Token
           #rm_matcher_apperance
 
           match name {
-            #(#appearance)*
+            #(#cases_appearance)*
             _ => Err(PropertyError::InvalidKey {
               key: name.to_string()
             }),
@@ -176,7 +199,7 @@ pub fn get_impl_trait_tokens(struct_id: Ident, data_struct: DataStruct) -> Token
           #rm_matcher_layout
 
           match name {
-            #(#layout)*
+            #(#cases_layout)*
             _ => Err(PropertyError::InvalidKey {
               key: name.to_string()
             }),
