@@ -121,7 +121,7 @@ pub fn field_to_name_and_ty(field: Field) -> Option<(Ident, Path)> {
 
 /// Get key property name as class case
 /// With fix bug of inflector
-pub fn property_class_case(name: &str) -> (String, Ident)  {
+pub fn property_class_case(name: &str) -> (String, Ident) {
     let name = name.to_string().to_class_case();
     let name: String = match name.as_str() {
         "BorderBottomWidth" => "BorderBottom".into(),

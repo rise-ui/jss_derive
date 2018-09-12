@@ -24,12 +24,14 @@ fn get_after_match_setters(name: &str) -> TokenStream {
     }
 }
 
-
 fn switch_case(field: StructField) -> TokenStream {
     let name = field.name;
 
+    let setter_name = "set_".to_string() + name.to_string().as_ref();
+    let setter_name = Ident::new(setter_name.as_str(), Span::call_site());
+
     quote! {
-        stringify!(#name) => setters.set_#name(&mut self, name.to_string(), property),
+        stringify!(#name) => setters::#setter_name(self, name.to_string(), property),
     }
 }
 
@@ -38,11 +40,14 @@ fn setter_fn_appearance(field: StructField) -> TokenStream {
     let field_type = field.ftype;
     let name = field.name;
 
+    let setter_name = "set_".to_string() + name.to_string().as_ref();
+    let setter_name = Ident::new(setter_name.as_str(), Span::call_site());
+
     quote!{
-        pub fn set_#name(
+        pub fn #setter_name(
             properties: &mut Properties,
             key: String,
-            value: PropertyValue
+            value: Appearance
         ) -> Result<(), PropertyError> {
             if let Some(expected) = extract!(Appearance::#field_type(_), value) {
                 let wrap_value = Appearance::#field_type(expected);
@@ -54,7 +59,7 @@ fn setter_fn_appearance(field: StructField) -> TokenStream {
                     property: stringify!(#name).to_string(),
                 })
             }
-        },
+        }
     }
 }
 
@@ -66,11 +71,14 @@ fn setter_fn_layout(field: StructField) -> TokenStream {
     let field_type = field.ftype;
     let name = field.name;
 
+    let setter_name = "set_".to_string() + name.to_string().as_ref();
+    let setter_name = Ident::new(setter_name.as_str(), Span::call_site());
+
     quote!{
-        pub fn set_#name(
+        pub fn #setter_name(
             properties: &mut Properties,
             key: String,
-            value: PropertyValue
+            value: Layout,
         ) -> Result<(), PropertyError> {
             if let Some(expected) = extract!(Layout::#field_type(_), value) {
                 let wrap_value = FlexStyle::#enum_name(expected);
@@ -82,7 +90,7 @@ fn setter_fn_layout(field: StructField) -> TokenStream {
                   property: stringify!(#name).to_string(),
                 })
             }
-        } 
+        }
     }
 }
 
@@ -146,65 +154,71 @@ fn get_expressions(ast_struct: DataStruct) -> (Vec<TokenStream>, Vec<TokenStream
     (apperance_setters, layout_setters, apperance_cases, layout_cases)
 }
 
-pub fn get_impl_trait_tokens(struct_id: Ident, data_struct: DataStruct) -> TokenStream {
+pub fn get_impl_trait_tokens(_: Ident, data_struct: DataStruct) -> TokenStream {
     let (setters_appearance, setters_layout, cases_appearance, cases_layout) = get_expressions(data_struct);
 
     let rm_matcher_apperance = match_remove_property("appearance");
     let rm_matcher_layout = match_remove_property("layout");
 
-    quote! {
-      use types::{Properties, PropertyError, PropertyValue, Appearance, Layout};
-      use utils::{apperance_keys_contains, layout_keys_contains};
-      use std::collections::HashMap;
-      use inflector::Inflector;
-      use yoga::FlexStyle;
-      use traits::TStyle;
+    let tokens = quote! {
+        use types::{Properties, PropertyError, PropertyValue, Appearance, Layout};
+        use utils::{apperance_keys_contains, layout_keys_contains};
+        use std::collections::HashMap;
+        use inflector::Inflector;
+        use yoga::FlexStyle;
+        use traits::TStyle;
 
-      pub mod setters {
-          #(#setters_appearance)*
-          #(#setters_layout)*
-      }
+        /// Module with vanilla style setters
+        pub mod setters {
+            use super::{Properties, Appearance, Layout, PropertyError, FlexStyle};
 
-      impl TStyle for Properties {
-        fn get_apperance_style(&self, name: &str) -> Option<&Appearance> {
-          self.appearance.0.get(name)
+            #(#setters_appearance)*
+            #(#setters_layout)*
         }
 
-        fn get_layout_style(&self, name: &str) -> Option<&FlexStyle> {
-          self.layout.0.get(name)
+        impl TStyle for Properties {
+            fn get_apperance_style(&self, name: &str) -> Option<&Appearance> {
+                self.appearance.0.get(name)
+            }
+
+            fn get_layout_style(&self, name: &str) -> Option<&FlexStyle> {
+                self.layout.0.get(name)
+            }
+
+            fn set_style(&mut self, name: &str, property: PropertyValue) -> Result<(), PropertyError> {
+                if apperance_keys_contains(&name) {
+                    self.set_apperance_style(name, extract!(PropertyValue::Appearance(_), property))
+                } else if layout_keys_contains(&name) {
+                    self.set_layout_style(name, extract!(PropertyValue::Layout(_), property))
+                } else {
+                    Err(PropertyError::InvalidKey { key: name.to_string() })
+                }
+            }
+
+            fn set_apperance_style(&mut self, name: &str, property: Option<Appearance>) -> Result<(), PropertyError> {
+                #rm_matcher_apperance
+
+                match name {
+                    #(#cases_appearance)*
+                    _ => Err(PropertyError::InvalidKey {
+                        key: name.to_string()
+                    })
+                }
+            }
+
+            fn set_layout_style(&mut self, name: &str, property: Option<Layout>) -> Result<(), PropertyError> {
+                #rm_matcher_layout
+
+                match name {
+                    #(#cases_layout)*
+                    _ => Err(PropertyError::InvalidKey {
+                        key: name.to_string()
+                    })
+                }
+            }
         }
+    };
 
-        fn set_style(&mut self, name: &str, property: PropertyValue) -> Result<(), PropertyError> {
-          if apperance_keys_contains(&name) {
-            self.set_apperance_style(name, extract!(PropertyValue::Appearance(_), property))
-          } else if layout_keys_contains(&name) {
-            self.set_layout_style(name, extract!(PropertyValue::Layout(_), property))
-          } else {
-            Err(PropertyError::InvalidKey { key: name.to_string() })
-          }
-        }
-
-        fn set_apperance_style(&mut self, name: &str, property: Option<Appearance>) -> Result<(), PropertyError> {
-          #rm_matcher_apperance
-
-          match name {
-            #(#cases_appearance)*
-            _ => Err(PropertyError::InvalidKey {
-              key: name.to_string()
-            }),
-          }
-        }
-
-        fn set_layout_style(&mut self, name: &str, property: Option<Layout>) -> Result<(), PropertyError> {
-          #rm_matcher_layout
-
-          match name {
-            #(#cases_layout)*
-            _ => Err(PropertyError::InvalidKey {
-              key: name.to_string()
-            }),
-          }
-        }
-      }
-    }
+    // println!("{}", tokens.to_string());
+    tokens
 }
