@@ -1,6 +1,5 @@
 use proc_macro2::{Ident, Span, TokenStream};
 use syn::{DataStruct, Fields};
-use inflector::Inflector;
 
 use common::{
   apperance_keys_contains,
@@ -143,20 +142,6 @@ fn setter_fn_layout(field: StructField) -> TokenStream {
     }
 }
 
-fn match_remove_property(name: &str) -> TokenStream {
-    // If value argument is None then remove key from map
-    let name = Ident::new(name, Span::call_site());
-
-    quote!{
-      if property.is_none() {
-        self.#name.0.remove(name).is_some();
-        return Ok(());
-      }
-
-      let property = property.unwrap();
-    }
-}
-
 fn define_property_type(field: StructField) -> TokenStream {
     let name = field.name; let ftype = field.ftype;
 
@@ -173,9 +158,6 @@ pub fn get_impl_trait_tokens(_: Ident, data_struct: DataStruct) -> TokenStream {
         property_types
     ) = get_expressions(data_struct);
 
-    let rm_matcher_apperance = match_remove_property("appearance");
-    let rm_matcher_layout = match_remove_property("layout");
-
     let tokens = quote! {
         use std::collections::HashMap;
         use inflector::Inflector;
@@ -185,6 +167,7 @@ pub fn get_impl_trait_tokens(_: Ident, data_struct: DataStruct) -> TokenStream {
         use utils::{
             apperance_keys_contains,
             layout_keys_contains,
+            expected_type_error,
             self
         };
 
@@ -230,26 +213,26 @@ pub fn get_impl_trait_tokens(_: Ident, data_struct: DataStruct) -> TokenStream {
         }
 
         impl TStyle for Properties {
-            fn get_apperance_style(&self, name: &str) -> Option<&Appearance> {
-                self.appearance.0.get(name)
-            }
+            fn set_style<T: Into<PropertyValue>>(&mut self, name: &str, property: T) -> Result<(), PropertyError> {
+                let property = property.into();
 
-            fn get_layout_style(&self, name: &str) -> Option<&FlexStyle> {
-                self.layout.0.get(name)
-            }
-
-            fn set_style(&mut self, name: &str, property: PropertyValue) -> Result<(), PropertyError> {
                 if apperance_keys_contains(&name) {
-                    self.set_apperance_style(name, extract!(PropertyValue::Appearance(_), property))
+                    extract!(PropertyValue::Appearance(_), property)
+                        .ok_or(expected_type_error(name.to_string()))
+                        .and_then(|value| self.set_apperance_style(name, value))
                 } else if layout_keys_contains(&name) {
-                    self.set_layout_style(name, extract!(PropertyValue::Layout(_), property))
+                    extract!(PropertyValue::Layout(_), property)
+                        .ok_or(expected_type_error(name.to_string()))
+                        .and_then(|value| self.set_layout_style(name, value))
                 } else {
-                    Err(PropertyError::InvalidKey { key: name.to_string() })
+                    Err(PropertyError::InvalidKey {
+                        key: name.to_string()
+                    })
                 }
             }
 
-            fn set_apperance_style(&mut self, name: &str, property: Option<Appearance>) -> Result<(), PropertyError> {
-                #rm_matcher_apperance
+            fn set_apperance_style<T: Into<Appearance>>(&mut self, name: &str, property: T) -> Result<(), PropertyError> {
+                let property = property.into();
 
                 match name {
                     #(#cases_appearance)*
@@ -259,8 +242,8 @@ pub fn get_impl_trait_tokens(_: Ident, data_struct: DataStruct) -> TokenStream {
                 }
             }
 
-            fn set_layout_style(&mut self, name: &str, property: Option<Layout>) -> Result<(), PropertyError> {
-                #rm_matcher_layout
+            fn set_layout_style<T: Into<Layout>>(&mut self, name: &str, property: T) -> Result<(), PropertyError> {
+                let property = property.into();
 
                 match name {
                     #(#cases_layout)*
@@ -268,6 +251,14 @@ pub fn get_impl_trait_tokens(_: Ident, data_struct: DataStruct) -> TokenStream {
                         key: name.to_string()
                     })
                 }
+            }
+
+            fn remove_style(&mut self, name: &str) {
+                let key = name.to_string();
+                
+                self.expressions.0.remove(&key).is_some();
+                self.appearance.0.remove(&key).is_some();
+                self.layout.0.remove(&key).is_some();
             }
         }
     };

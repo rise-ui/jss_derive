@@ -78,7 +78,7 @@ fn get_match_expression(field: StructField) -> TokenStream {
         properties.states.get_mut(&state_name)
           .ok_or(ParseError::StateMissing { name: state_name })
           .and_then(|state| {
-            state.#action_method(key.as_str(), Some(Content(parsed)))
+            state.#action_method(key.as_str(), Content(parsed))
               .map_err(|error| ParseError::PropertyError { error })
           })?;
       },
