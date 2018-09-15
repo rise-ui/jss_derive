@@ -164,10 +164,11 @@ pub fn get_impl_trait_tokens(_: Ident, data_struct: DataStruct) -> TokenStream {
         use yoga::FlexStyle;
         use traits::TStyle;
 
+        use utils::setter::expected_type_error;
+        
         use utils::{
             apperance_keys_contains,
             layout_keys_contains,
-            expected_type_error,
             self
         };
 
@@ -201,7 +202,7 @@ pub fn get_impl_trait_tokens(_: Ident, data_struct: DataStruct) -> TokenStream {
                 Layout,
             };
             
-            use super::utils::{
+            use super::utils::setter::{
                 set_layout_unit_without_check,
                 set_appearance_without_check,
                 set_layout_without_check,

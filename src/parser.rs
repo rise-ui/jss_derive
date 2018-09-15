@@ -90,8 +90,8 @@ pub fn get_impl_trait_tokens(_: Ident, data_struct: DataStruct) -> TokenStream {
 
     quote! {
       use types::{Style, ParseError, PropertyKeyInfo, DefaultParseMiddleware};
-      use types::property_types::*;
       use traits::*;
+      use super::*;
 
       impl TParseMiddleware for DefaultParseMiddleware {
         fn name(&self) -> String {
