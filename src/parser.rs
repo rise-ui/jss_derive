@@ -89,11 +89,11 @@ pub fn get_impl_trait_tokens(_: Ident, data_struct: DataStruct) -> TokenStream {
     let matches = get_expressions(data_struct);
 
     quote! {
-      use types::{Style, ParseError, PropertyKeyInfo, DefaultParseMiddleware};
+      use types::{Style, ParseError, PropertyKeyInfo, ParseStyleMiddleware};
       use traits::*;
       use super::*;
 
-      impl TParseMiddleware for DefaultParseMiddleware {
+      impl TParseStyleMiddleware for ParseStyleMiddleware {
         fn name(&self) -> String {
           "default".to_string()
         }
