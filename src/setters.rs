@@ -2,7 +2,7 @@ use proc_macro2::{Ident, Span, TokenStream};
 use syn::{DataStruct, Fields};
 
 use common::{
-  apperance_keys_contains,
+  appearance_keys_contains,
   layout_keys_contains,
   field_to_name_and_ty,
   property_class_case,
@@ -29,10 +29,10 @@ fn get_expressions(ast_struct: DataStruct) -> (
         .filter_map(|(name, type_path)| optioned_type(name, type_path.segments))
         .collect::<Vec<StructField>>();
 
-    let apperance_setters = collected
+    let appearance_setters = collected
         .iter()
         .cloned()
-        .filter(|x| apperance_keys_contains(&x.name.to_string().as_str()))
+        .filter(|x| appearance_keys_contains(&x.name.to_string().as_str()))
         .map(setter_fn_appearance)
         .collect::<Vec<TokenStream>>();
 
@@ -43,10 +43,10 @@ fn get_expressions(ast_struct: DataStruct) -> (
         .map(setter_fn_layout)
         .collect::<Vec<TokenStream>>();
 
-    let apperance_cases = collected
+    let appearance_cases = collected
         .iter()
         .cloned()
-        .filter(|x| apperance_keys_contains(&x.name.to_string().as_str()))
+        .filter(|x| appearance_keys_contains(&x.name.to_string().as_str()))
         .map(switch_case)
         .collect::<Vec<TokenStream>>();
 
@@ -63,7 +63,7 @@ fn get_expressions(ast_struct: DataStruct) -> (
         .map(define_property_type)
         .collect::<Vec<TokenStream>>();
 
-    (apperance_setters, layout_setters, apperance_cases, layout_cases, property_types)
+    (appearance_setters, layout_setters, appearance_cases, layout_cases, property_types)
 }
 
 fn switch_case(field: StructField) -> TokenStream {
@@ -167,7 +167,7 @@ pub fn get_impl_trait_tokens(_: Ident, data_struct: DataStruct) -> TokenStream {
         use utils::setter::expected_type_error;
         
         use utils::{
-            apperance_keys_contains,
+            appearance_keys_contains,
             layout_keys_contains,
             self
         };
@@ -217,10 +217,10 @@ pub fn get_impl_trait_tokens(_: Ident, data_struct: DataStruct) -> TokenStream {
             fn set_style<T: Into<PropertyValue>>(&mut self, name: &str, property: T) -> Result<(), PropertyError> {
                 let property = property.into();
 
-                if apperance_keys_contains(&name) {
+                if appearance_keys_contains(&name) {
                     extract!(PropertyValue::Appearance(_), property)
                         .ok_or(expected_type_error(name.to_string()))
-                        .and_then(|value| self.set_apperance_style(name, value))
+                        .and_then(|value| self.set_appearance_style(name, value))
                 } else if layout_keys_contains(&name) {
                     extract!(PropertyValue::Layout(_), property)
                         .ok_or(expected_type_error(name.to_string()))
@@ -232,7 +232,7 @@ pub fn get_impl_trait_tokens(_: Ident, data_struct: DataStruct) -> TokenStream {
                 }
             }
 
-            fn set_apperance_style<T: Into<Appearance>>(&mut self, name: &str, property: T) -> Result<(), PropertyError> {
+            fn set_appearance_style<T: Into<Appearance>>(&mut self, name: &str, property: T) -> Result<(), PropertyError> {
                 let property = property.into();
 
                 match name {

@@ -4,7 +4,7 @@ use proc_macro2::{Ident, Span};
 use inflector::Inflector;
 
 lazy_static! {
-    static ref APPERANCE_KEYS: Vec<&'static str> = vec![
+    static ref APPEARANCE_KEYS: Vec<&'static str> = vec![
         "background",
         "transform",
         "filter",
@@ -73,8 +73,8 @@ lazy_static! {
     ];
 }
 
-pub fn apperance_keys_contains(name: &str) -> bool {
-    APPERANCE_KEYS.contains(&name)
+pub fn appearance_keys_contains(name: &str) -> bool {
+    APPEARANCE_KEYS.contains(&name)
 }
 
 pub fn layout_keys_contains(name: &str) -> bool {

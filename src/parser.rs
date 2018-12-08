@@ -3,7 +3,7 @@ use syn::{DataStruct, Fields};
 use inflector::Inflector;
 
 use common::{
-  apperance_keys_contains,
+  appearance_keys_contains,
   field_to_name_and_ty,
   optioned_type,
   StructField,
@@ -28,15 +28,15 @@ fn get_expression_params(field: StructField) -> (Ident, Ident, Ident) {
     let field_type = field.ftype;
     let name = field.name;
 
-    let is_apperance = apperance_keys_contains(&name.to_string());
+    let is_appearance = appearance_keys_contains(&name.to_string());
 
-    let action_method: Ident = if is_apperance {
-        Ident::new("set_apperance_style", Span::call_site())
+    let action_method: Ident = if is_appearance {
+        Ident::new("set_appearance_style", Span::call_site())
     } else {
         Ident::new("set_layout_style", Span::call_site())
     };
 
-    let wrapper: Ident = if is_apperance {
+    let wrapper: Ident = if is_appearance {
         Ident::new("Appearance", Span::call_site())
     } else {
         Ident::new("Layout", Span::call_site())
