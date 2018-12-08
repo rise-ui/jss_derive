@@ -1,6 +1,6 @@
 [package]
 name = "jss_derive"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Anton Shramko <antonshramko@yandex.ru>"]
 repository = "https://github.com/rise-ui/jss_derive"
 homepage = "https://github.com/rise-ui/jss_derive"
