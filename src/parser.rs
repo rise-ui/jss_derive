@@ -63,6 +63,12 @@ fn get_match_expression(field: StructField) -> TokenStream {
 
     let (wrapper, wrapper_ty, action_method) = get_expression_params(field);
 
+    let key_getter = if appearance_keys_contains(&name.to_string()) {
+        Ident::new("get_appearance_property_key", Span::call_site())
+    } else {
+        Ident::new("get_layout_property_key", Span::call_site())
+    };
+
     quote!{
       stringify!(#name) => {
         use self::#wrapper::#wrapper_ty as Content;
@@ -78,7 +84,7 @@ fn get_match_expression(field: StructField) -> TokenStream {
         properties.states.get_mut(&state_name)
           .ok_or(ParseError::StateMissing { name: state_name })
           .and_then(|state| {
-            state.#action_method(key.as_str(), Content(parsed))
+            state.#action_method(#key_getter(key.as_str()).unwrap(), Content(parsed))
               .map_err(|error| ParseError::PropertyError { error })
           })?;
       },
@@ -90,6 +96,7 @@ pub fn get_impl_trait_tokens(_: Ident, data_struct: DataStruct) -> TokenStream {
 
     quote! {
       use types::{Style, ParseError, PropertyKeyInfo, ParseStyleMiddleware};
+      use utils::{get_appearance_property_key, get_layout_property_key};
       use traits::*;
       use super::*;
 

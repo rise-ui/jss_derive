@@ -1,5 +1,6 @@
 use proc_macro2::{Ident, Span, TokenStream};
 use syn::{DataStruct, Fields};
+use inflector::Inflector;
 
 use common::{
   appearance_keys_contains,
@@ -10,8 +11,15 @@ use common::{
   StructField,
 };
 
+fn capitalize(s: &str) -> String {
+    let mut c = s.chars();
+    match c.next() {
+        None => String::new(),
+        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+    }
+}
+
 fn get_expressions(ast_struct: DataStruct) -> (
-    Vec<TokenStream>,
     Vec<TokenStream>,
     Vec<TokenStream>,
     Vec<TokenStream>,
@@ -47,33 +55,35 @@ fn get_expressions(ast_struct: DataStruct) -> (
         .iter()
         .cloned()
         .filter(|x| appearance_keys_contains(&x.name.to_string().as_str()))
-        .map(switch_case)
+        .map(|d| switch_case(d, "AppearanceKey"))
         .collect::<Vec<TokenStream>>();
 
     let layout_cases = collected
         .iter()
         .cloned()
         .filter(|x| layout_keys_contains(&x.name.to_string().as_str()))
-        .map(switch_case)
+        .map(|d| switch_case(d, "LayoutKey"))
         .collect::<Vec<TokenStream>>();
 
-    let property_types = collected
-        .iter()
-        .cloned()
-        .map(define_property_type)
-        .collect::<Vec<TokenStream>>();
-
-    (appearance_setters, layout_setters, appearance_cases, layout_cases, property_types)
+    (appearance_setters, layout_setters, appearance_cases, layout_cases)
 }
 
-fn switch_case(field: StructField) -> TokenStream {
+fn switch_case(field: StructField, key_type: &str) -> TokenStream {
     let name = field.name;
 
     let setter_name = "set_".to_string() + name.to_string().as_ref();
     let setter_name = Ident::new(setter_name.as_str(), Span::call_site());
 
+    let (etype, ename) = {
+        let etype = Ident::new(key_type, Span::call_site());
+        let ename = name.to_string().to_camel_case();
+        let ename = Ident::new(capitalize(ename.as_str()).as_str(), Span::call_site());
+
+        (etype, ename)
+    };
+
     quote! {
-        stringify!(#name) => setters::#setter_name(self, name.to_string(), property),
+        #etype::#ename => setters::#setter_name(self, name, property),
     }
 }
 
@@ -87,7 +97,7 @@ fn setter_fn_appearance(field: StructField) -> TokenStream {
     quote!{
         pub fn #setter_name(
             properties: &mut Properties,
-            key: String,
+            key: AppearanceKey,
             value: Appearance
         ) -> Result<(), PropertyError> {
             if let Some(expected) = extract!(Appearance::#field_type(_), value) {
@@ -95,7 +105,7 @@ fn setter_fn_appearance(field: StructField) -> TokenStream {
                 set_appearance_without_check(properties, key, wrap_value);
                 Ok(())
             } else {
-                Err(expected_type_error(key))
+                Err(expected_type_error(PropertyKey::Appearance(key)))
             }
         }
     }
@@ -118,7 +128,7 @@ fn setter_fn_layout(field: StructField) -> TokenStream {
                 set_layout_without_check(properties, key, wrap_value);
                 Ok(())
             } else {
-                Err(expected_type_error(key))
+                Err(expected_type_error(PropertyKey::Layout(key)))
             }
         }
     } else {
@@ -126,7 +136,7 @@ fn setter_fn_layout(field: StructField) -> TokenStream {
             if let Some(expected) = extract!(Layout::SharedUnit(_), value) {
                 set_layout_unit_without_check(properties, key, expected)
             } else {
-                Err(expected_type_error(key))
+                Err(expected_type_error(PropertyKey::Layout(key)))
             }
         }
     };
@@ -134,7 +144,7 @@ fn setter_fn_layout(field: StructField) -> TokenStream {
     quote!{
         pub fn #setter_name(
             properties: &mut Properties,
-            key: String,
+            key: LayoutKey,
             value: Layout,
         ) -> Result<(), PropertyError> {
             #setter
@@ -142,25 +152,17 @@ fn setter_fn_layout(field: StructField) -> TokenStream {
     }
 }
 
-fn define_property_type(field: StructField) -> TokenStream {
-    let name = field.name; let ftype = field.ftype;
-
-    quote!{ map.insert(stringify!(#name), stringify!(#ftype)); }
-}
-
 pub fn get_impl_trait_tokens(_: Ident, data_struct: DataStruct) -> TokenStream {
     let (
         setters_appearance,
         setters_layout,
         cases_appearance,
-        cases_layout, 
-        
-        property_types
+        cases_layout
     ) = get_expressions(data_struct);
 
     let tokens = quote! {
-        use std::collections::HashMap;
         use inflector::Inflector;
+        use hashbrown::HashMap;
         use yoga::FlexStyle;
         use traits::TStyle;
 
@@ -180,25 +182,16 @@ pub fn get_impl_trait_tokens(_: Ident, data_struct: DataStruct) -> TokenStream {
             Layout
         };
 
-        lazy_static!{
-            static ref PROPERTY_TYPES: HashMap<&'static str, &'static str> = {
-                let mut map = HashMap::new();
-                #(#property_types)*
-                map
-            };
-        }
-
-        pub fn get_reflect_property_type(key: &str) -> &str {
-            PROPERTY_TYPES[key]
-        }
-
         /// Module with vanilla style setters
         pub mod setters {
             use super::{
                 PropertyError,
+                AppearanceKey,
+                PropertyKey,
                 Properties,
                 Appearance,
                 FlexStyle,
+                LayoutKey,
                 Layout,
             };
             
@@ -214,52 +207,51 @@ pub fn get_impl_trait_tokens(_: Ident, data_struct: DataStruct) -> TokenStream {
         }
 
         impl TStyle for Properties {
-            fn set_style<T: Into<PropertyValue>>(&mut self, name: &str, property: T) -> Result<(), PropertyError> {
+            fn set_style<T: Into<PropertyValue>>(&mut self, key: PropertyKey, property: T) -> Result<(), PropertyError> {
                 let property = property.into();
 
-                if appearance_keys_contains(&name) {
-                    extract!(PropertyValue::Appearance(_), property)
-                        .ok_or(expected_type_error(name.to_string()))
-                        .and_then(|value| self.set_appearance_style(name, value))
-                } else if layout_keys_contains(&name) {
-                    extract!(PropertyValue::Layout(_), property)
-                        .ok_or(expected_type_error(name.to_string()))
-                        .and_then(|value| self.set_layout_style(name, value))
-                } else {
-                    Err(PropertyError::InvalidKey {
-                        key: name.to_string()
-                    })
+                match key {
+                    PropertyKey::Appearance(key) => {
+                        extract!(PropertyValue::Appearance(_), property)
+                            .ok_or(expected_type_error(PropertyKey::Appearance(key)))
+                            .and_then(|value| self.set_appearance_style(key, value))
+                    },
+
+                    PropertyKey::Layout(key) => {
+                        extract!(PropertyValue::Layout(_), property)
+                            .ok_or(expected_type_error(PropertyKey::Layout(key)))
+                            .and_then(|value| self.set_layout_style(key, value))
+                    }
                 }
             }
 
-            fn set_appearance_style<T: Into<Appearance>>(&mut self, name: &str, property: T) -> Result<(), PropertyError> {
+            fn set_appearance_style<T: Into<Appearance>>(&mut self, name: AppearanceKey, property: T) -> Result<(), PropertyError> {
                 let property = property.into();
 
                 match name {
                     #(#cases_appearance)*
-                    _ => Err(PropertyError::InvalidKey {
-                        key: name.to_string()
-                    })
                 }
             }
 
-            fn set_layout_style<T: Into<Layout>>(&mut self, name: &str, property: T) -> Result<(), PropertyError> {
+            fn set_layout_style<T: Into<Layout>>(&mut self, name: LayoutKey, property: T) -> Result<(), PropertyError> {
                 let property = property.into();
 
                 match name {
                     #(#cases_layout)*
-                    _ => Err(PropertyError::InvalidKey {
-                        key: name.to_string()
-                    })
                 }
             }
 
-            fn remove_style(&mut self, name: &str) {
-                let key = name.to_string();
-                
-                self.expressions.0.remove(&key).is_some();
-                self.appearance.0.remove(&key).is_some();
-                self.layout.0.remove(&key).is_some();
+            fn remove_style(&mut self, key: PropertyKey) {
+                match key {
+                    PropertyKey::Appearance(key) => {
+                        self.appearance.0.remove(&key).is_some();
+                    },
+
+                    PropertyKey::Layout(key) => {
+                        self.expressions.0.remove(&key).is_some();
+                        self.layout.0.remove(&key).is_some();
+                    },
+                }
             }
         }
     };
